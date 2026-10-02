@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1117">
+<title>Cerca</title>
+<meta name="description" content="Ubicación familiar, lugares seguros, botón SOS y chat entre los celulares de la familia.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<style>
+  :root{
+    --bg:#0e1117; --panel:#171d28; --panel2:#1e2634; --line:#2a3545;
+    --txt:#e8edf5; --dim:#92a0b4; --acc:#3ecf9a; --acc2:#5b8cff;
+    --rojo:#ff5d5d; --amar:#ffc34d; --radio:16px;
+    --safe-b:env(safe-area-inset-bottom,0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    font-size:16px;line-height:1.45;overscroll-behavior:none}
+  button,input,select,textarea{font:inherit;color:inherit}
+  .oculto{display:none!important}
+
+  /* ---------- Onboarding ---------- */
+  #onb{min-height:100%;display:flex;flex-direction:column;justify-content:center;
+    padding:28px 20px calc(28px + var(--safe-b));gap:18px;max-width:520px;margin:0 auto}
+  .logo{display:flex;align-items:center;gap:12px;font-size:28px;font-weight:700}
+  .logo .mark{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;
+    background:linear-gradient(145deg,var(--acc),var(--acc2));font-size:24px}
+  .sub{color:var(--dim);margin:-8px 0 6px}
+  .paso{background:var(--panel);border:1px solid var(--line);border-radius:var(--radio);padding:18px;display:grid;gap:12px}
+  .paso h2{margin:0;font-size:18px}
+  label{display:grid;gap:6px;font-size:14px;color:var(--dim)}
+  input[type=text],input[type=number],select,textarea{
+    background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;width:100%}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--acc2);outline-offset:1px}
+  .btn{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:13px 16px;
+    font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+  .btn:active{transform:scale(.985)}
+  .btn.pri{background:linear-gradient(145deg,var(--acc),#2bb489);border:0;color:#05231a}
+  .btn.sec{background:transparent}
+  .btn.peligro{border-color:#5a2a2a;color:#ff9a9a}
+  .btn.ancho{width:100%}
+  .fila{display:flex;gap:10px;flex-wrap:wrap}
+  .fila>*{flex:1 1 0;min-width:120px}
+  .codigo{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace;font-size:30px;
+    letter-spacing:5px;text-align:center;font-weight:700;color:var(--acc)}
+  #onbCodigo{text-transform:uppercase;letter-spacing:4px;font-family:ui-monospace,Consolas,monospace;text-align:center;font-size:22px}
+  .pick{display:flex;gap:8px;flex-wrap:wrap}
+  .pick button{width:44px;height:44px;border-radius:50%;border:2px solid transparent;
+    background:var(--panel2);font-size:21px;display:grid;place-items:center;cursor:pointer}
+  .pick button[aria-pressed=true]{border-color:var(--txt);transform:scale(1.06)}
+  .pick.colores button{font-size:0}
+  .rol{display:flex;gap:10px}
+  .rol button{flex:1;padding:14px;border-radius:12px;border:2px solid var(--line);
+    background:var(--panel2);display:grid;gap:2px;cursor:pointer;text-align:center}
+  .rol button[aria-pressed=true]{border-color:var(--acc);background:#15291f}
+  .rol small{color:var(--dim)}
+  .nota{font-size:13px;color:var(--dim)}
+  .nota b{color:var(--txt)}
+
+  /* ---------- Shell ---------- */
+  #app{height:100%;display:flex;flex-direction:column}
+  header{display:flex;align-items:center;gap:10px;padding:10px 14px;
+    background:var(--panel);border-bottom:1px solid var(--line);flex:0 0 auto}
+  header .fam{font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .punto{width:10px;height:10px;border-radius:50%;background:#555;flex:0 0 auto}
+  .punto.on{background:var(--acc);box-shadow:0 0 8px var(--acc)}
+  .punto.err{background:var(--rojo)}
+  .aviso{display:flex;align-items:center;gap:8px;padding:7px 14px;font-size:13px;
+    background:#132a22;color:#9fe8cd;border-bottom:1px solid var(--line);flex:0 0 auto}
+  .aviso.pausa{background:#2c2512;color:#ffd98a}
+  main{flex:1;min-height:0;position:relative}
+  .vista{position:absolute;inset:0;display:none;flex-direction:column}
+  .vista.activa{display:flex}
+  .scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px;display:grid;gap:12px;align-content:start}
+  nav{display:flex;background:var(--panel);border-top:1px solid var(--line);
+    padding-bottom:var(--safe-b);flex:0 0 auto}
+  nav button{flex:1;background:none;border:0;padding:9px 4px;color:var(--dim);
+    font-size:11px;display:grid;gap:2px;justify-items:center;cursor:pointer}
+  nav button span{font-size:21px;line-height:1}
+  nav button[aria-current=true]{color:var(--acc)}
+  nav button .globo{position:absolute;transform:translate(14px,-4px);background:var(--rojo);
+    color:#fff;border-radius:9px;min-width:17px;padding:0 4px;font-size:10px;font-weight:700;line-height:17px}
+
+  /* ---------- Mapa ---------- */
+  #mapa{flex:1;min-height:0;background:#0b0e13}
+  .leaflet-container{background:#0b0e13}
+  .pin{display:grid;place-items:center;border-radius:50%;border:3px solid #fff;
+    box-shadow:0 2px 10px rgba(0,0,0,.6);font-size:18px;width:38px;height:38px}
+  .pin.viejo{opacity:.5}
+  .pin.sos{animation:lat .9s infinite;border-color:var(--rojo)}
+  @keyframes lat{50%{box-shadow:0 0 0 10px rgba(255,93,93,.35)}}
+  .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel);color:var(--txt)}
+  .tiras{display:flex;gap:8px;overflow-x:auto;padding:10px 12px;background:var(--panel);
+    border-top:1px solid var(--line);flex:0 0 auto;scrollbar-width:none}
+  .tiras::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;background:var(--panel2);border:1px solid var(--line);border-radius:14px;
+    padding:8px 11px;display:flex;gap:9px;align-items:center;cursor:pointer;min-width:132px}
+  .chip .av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:17px;flex:0 0 auto}
+  .chip b{display:block;font-size:14px;white-space:nowrap}
+  .chip small{color:var(--dim);font-size:11.5px;white-space:nowrap}
+  .chip.alerta{border-color:var(--rojo)}
+  #sos{position:absolute;right:14px;bottom:14px;width:74px;height:74px;border-radius:50%;
+    border:0;background:linear-gradient(145deg,#ff6b6b,#d62f2f);color:#fff;font-weight:800;
+    font-size:15px;letter-spacing:1px;box-shadow:0 6px 20px rgba(0,0,0,.55);cursor:pointer;z-index:500;
+    display:grid;place-items:center}
+  #sos[data-armado=si]{animation:lat .7s infinite}
+  #sosAnillo{position:absolute;inset:-6px;border-radius:50%;border:4px solid rgba(255,255,255,.85);
+    clip-path:inset(0 0 100% 0);pointer-events:none}
+  .fabs{position:absolute;left:14px;bottom:14px;display:grid;gap:8px;z-index:500}
+  .fab{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:rgba(23,29,40,.92);
+    font-size:20px;display:grid;place-items:center;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.5)}
+  .fab[aria-pressed=true]{background:#15291f;border-color:var(--acc)}
+
+  /* ---------- Tarjetas / listas ---------- */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radio);padding:14px;display:grid;gap:10px}
+  .card h2{margin:0;font-size:16px;display:flex;align-items:center;gap:8px}
+  .card h2 .lupa{margin-left:auto;font-weight:400;font-size:13px;color:var(--dim)}
+  .item{display:flex;gap:11px;align-items:center;background:var(--panel2);
+    border:1px solid var(--line);border-radius:12px;padding:11px}
+  .item .ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:18px;
+    background:#0f1621;flex:0 0 auto}
+  .item .tx{flex:1;min-width:0}
+  .item .tx b{display:block;font-size:14.5px}
+  .item .tx small{color:var(--dim);font-size:12.5px}
+  .mini{background:none;border:1px solid var(--line);border-radius:9px;padding:7px 9px;cursor:pointer;font-size:14px}
+  .vacio{color:var(--dim);font-size:14px;text-align:center;padding:14px}
+
+  /* ---------- Chat ---------- */
+  #chatLista{flex:1;min-height:0;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:9px}
+  .msg{max-width:84%;padding:9px 12px;border-radius:15px;background:var(--panel);
+    border:1px solid var(--line);font-size:14.5px;word-break:break-word}
+  .msg.mio{align-self:flex-end;background:#1d3a30;border-color:#2b5a4a}
+  .msg .quien{font-size:11.5px;color:var(--dim);display:block}
+  .msg .hora{font-size:10.5px;color:var(--dim);float:right;margin:3px 0 0 10px}
+  .msg.sistema{align-self:center;background:#131a25;color:var(--dim);font-size:12.5px;max-width:92%;text-align:center}
+  .msg.sos{align-self:center;background:#3a1717;border-color:#6b2a2a;color:#ffd0d0;max-width:92%;text-align:center;font-weight:600}
+  .msg a{color:var(--acc)}
+  #chatBarra{display:flex;gap:8px;padding:10px 12px calc(10px + var(--safe-b));background:var(--panel);
+    border-top:1px solid var(--line);align-items:flex-end}
+  #chatTexto{flex:1;resize:none;max-height:110px;border-radius:14px}
+  #chatBarra .btn{padding:12px 14px;flex:0 0 auto}
+
+  /* ---------- Hoja modal ---------- */
+  .hoja{position:fixed;inset:0;background:rgba(5,8,12,.72);display:none;z-index:900;
+    align-items:flex-end;justify-content:center}
+  .hoja.abierta{display:flex}
+  .hoja .caja{background:var(--panel);border:1px solid var(--line);border-radius:20px 20px 0 0;
+    padding:18px 16px calc(18px + var(--safe-b));width:100%;max-width:520px;display:grid;gap:12px;
+    max-height:88vh;overflow-y:auto}
+  .hoja h2{margin:0;font-size:17px}
+  .sw{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:12px;padding:12px}
+  .sw .tx{flex:1}
+  .sw .tx b{display:block;font-size:14.5px}
+  .sw .tx small{color:var(--dim);font-size:12.5px}
+  .sw input{width:46px;height:28px;appearance:none;background:#39445a;border-radius:14px;position:relative;
+    cursor:pointer;flex:0 0 auto;border:0}
+  .sw input:checked{background:var(--acc)}
+  .sw input::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;
+    background:#fff;transition:left .15s}
+  .sw input:checked::after{left:21px}
+  #alertaSOS{position:fixed;left:0;right:0;top:0;z-index:950;background:linear-gradient(145deg,#ff5d5d,#c62828);
+    color:#fff;padding:12px 14px;display:none;gap:10px;align-items:center;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+  #alertaSOS.abierta{display:flex}
+  #alertaSOS .tx{flex:1;font-weight:700;font-size:14.5px}
+  #alertaSOS button{background:rgba(0,0,0,.28);border:0;color:#fff;border-radius:10px;padding:9px 11px;cursor:pointer}
+  #toast{position:fixed;left:50%;bottom:calc(84px + var(--safe-b));transform:translateX(-50%);
+    background:#273243;border:1px solid var(--line);padding:11px 15px;border-radius:12px;font-size:14px;
+    z-index:980;opacity:0;pointer-events:none;transition:opacity .2s;max-width:88vw;text-align:center}
+  #toast.ver{opacity:1}
+  .kv{display:flex;justify-content:space-between;gap:12px;font-size:14px;padding:3px 0}
+  .kv span{color:var(--dim)}
+  @media (min-width:760px){ body{font-size:16.5px} .scroll{max-width:720px;margin:0 auto;width:100%} }
+</style>
+</head>
+<body>
+
+<!-- ============ ONBOARDING ============ -->
+<section id="onb">
+  <div class="logo"><div class="mark">📍</div> Cerca</div>
+  <p class="sub">Los celulares de la familia, conectados: dónde está cada uno, lugares seguros, botón SOS y chat.</p>
+
+  <div class="paso" id="onbInicio">
+    <h2>¿Cómo quieres empezar?</h2>
+    <button class="btn pri ancho" id="btnCrear">Crear mi familia</button>
+    <button class="btn sec ancho" id="btnUnirme">Unirme con un código</button>
+    <p class="nota">El primero crea la familia y comparte el código. Los demás se unen con ese código, desde su propio celular.</p>
+  </div>
+
+  <div class="paso oculto" id="onbCrear">
+    <h2>Crear familia</h2>
+    <label>Nombre de la familia <input type="text" id="onbFamNombre" placeholder="Familia Contreras" maxlength="30"></label>
+    <button class="btn pri ancho" id="btnCrearSig">Continuar</button>
+    <button class="btn sec ancho" data-volver>Volver</button>
+  </div>
+
+  <div class="paso oculto" id="onbUnirme">
+    <h2>Unirme a una familia</h2>
+    <label>Código de la familia <input type="text" id="onbCodigo" placeholder="ABC123" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+    <button class="btn pri ancho" id="btnUnirmeSig">Continuar</button>
+    <button class="btn sec ancho" data-volver>Volver</button>
+  </div>
+
+  <div class="paso oculto" id="onbPerfil">
+    <h2>¿Quién eres en este celular?</h2>
+    <label>Tu nombre <input type="text" id="onbNombre" placeholder="Gerson" maxlength="20"></label>
+    <div>
+      <label style="margin-bottom:6px">Tu rol</label>
+      <div class="rol" id="onbRol">
+        <button data-rol="adulto" aria-pressed="true">👩‍👦 Adulto<small>ve a todos</small></button>
+        <button data-rol="hijo" aria-pressed="false">🧒 Hijo<small>ve a los adultos</small></button>
+      </div>
+    </div>
+    <div>
+      <label style="margin-bottom:6px">Tu figura</label>
+      <div class="pick" id="onbEmoji"></div>
+    </div>
+    <div>
+      <label style="margin-bottom:6px">Tu color</label>
+      <div class="pick colores" id="onbColor"></div>
+    </div>
+    <button class="btn pri ancho" id="btnPerfilListo">Listo, entrar</button>
+    <button class="btn sec ancho" data-volver>Volver</button>
+    <p class="nota">Esta app <b>comparte tu ubicación</b> con los demás miembros de la familia mientras esté abierta. Siempre se ve un aviso arriba cuando está compartiendo.</p>
+  </div>
+</section>
+
+<!-- ============ APP ============ -->
+<div id="app" class="oculto">
+  <header>
+    <div class="mark" style="width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(145deg,var(--acc),var(--acc2));font-size:16px">📍</div>
+    <div class="fam" id="hFam">Familia</div>
+    <div class="punto" id="hPunto" title="Conexión"></div>
+    <button class="mini" id="btnInvitar">👪 Invitar</button>
+  </header>
+  <div class="aviso" id="hAviso"><span>🛰️</span><span id="hAvisoTx">Compartiendo tu ubicación con la familia</span></div>
+
+  <main>
+    <!-- MAPA -->
+    <section class="vista activa" id="vMapa">
+      <div style="position:relative;flex:1;min-height:0">
+        <div id="mapa"></div>
+        <div class="fabs">
+          <button class="fab" id="fabCentrar" title="Centrar en mí">🎯</button>
+          <button class="fab" id="fabTodos" title="Ver a todos">👪</button>
+          <button class="fab" id="fabDespierto" aria-pressed="false" title="Mantener pantalla encendida">☕</button>
+        </div>
+        <button id="sos" title="Mantén presionado 3 segundos">SOS<div id="sosAnillo" class="oculto"></div></button>
+      </div>
+      <div class="tiras" id="tiras"></div>
+    </section>
+
+    <!-- LUGARES -->
+    <section class="vista" id="vLugares">
+      <div class="scroll">
+        <div class="card">
+          <h2>📍 Lugares seguros</h2>
+          <p class="nota">Cuando alguien entra o sale de un lugar, se avisa en el chat familiar.</p>
+          <button class="btn pri ancho" id="btnNuevoLugar">➕ Agregar lugar</button>
+        </div>
+        <div id="listaLugares" style="display:grid;gap:10px"></div>
+        <div class="card">
+          <h2>🔔 Últimos avisos</h2>
+          <div id="listaAvisos" style="display:grid;gap:8px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CHAT -->
+    <section class="vista" id="vChat">
+      <div id="chatLista"></div>
+      <div id="chatBarra">
+        <button class="btn" id="btnCheckin" title="Llegué bien">✅</button>
+        <textarea id="chatTexto" rows="1" placeholder="Mensaje a la familia…" maxlength="500"></textarea>
+        <button class="btn pri" id="btnEnviar">➤</button>
+      </div>
+    </section>
+
+    <!-- YO -->
+    <section class="vista" id="vYo">
+      <div class="scroll">
+        <div class="card">
+          <h2>👤 Mi perfil</h2>
+          <div class="item">
+            <div class="ic" id="yoAv">🙂</div>
+            <div class="tx"><b id="yoNombre">—</b><small id="yoRol">—</small></div>
+            <button class="mini" id="btnEditarPerfil">Editar</button>
+          </div>
+          <div class="kv"><span>Ubicación</span><b id="yoUbic">—</b></div>
+          <div class="kv"><span>Batería</span><b id="yoBat">—</b></div>
+          <div class="kv"><span>Último envío</span><b id="yoEnvio">—</b></div>
+        </div>
+
+        <div class="card">
+          <h2>🛰️ Compartir ubicación</h2>
+          <div class="sw" id="swPausaCaja">
+            <div class="tx"><b>Pausar mi ubicación</b><small id="swPausaNota">Los demás verán que la pausaste.</small></div>
+            <input type="checkbox" id="swPausa">
+          </div>
+          <label>Enviar mi posición cada
+            <select id="selFrec">
+              <option value="30">30 segundos (más preciso, más batería)</option>
+              <option value="60" selected>1 minuto (recomendado)</option>
+              <option value="180">3 minutos</option>
+              <option value="600">10 minutos (ahorra batería)</option>
+            </select>
+          </label>
+          <div class="sw">
+            <div class="tx"><b>Avisos en este celular</b><small>Notificación cuando llega un SOS o un mensaje.</small></div>
+            <input type="checkbox" id="swNotif">
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>👪 Mi familia <span class="lupa" id="famCont"></span></h2>
+          <div id="listaMiembros" style="display:grid;gap:8px"></div>
+          <button class="btn ancho" id="btnInvitar2">Compartir invitación</button>
+        </div>
+
+        <div class="card">
+          <h2>⚙️ Avanzado</h2>
+          <div class="kv"><span>Código de familia</span><b id="avCodigo">—</b></div>
+          <div class="kv"><span>Nube</span><b id="avProyecto">—</b></div>
+          <label>Usar otro proyecto Firebase (opcional)
+            <textarea id="avFbConfig" rows="3" placeholder='const firebaseConfig = { apiKey: "...", projectId: "...", appId: "..." };'></textarea>
+          </label>
+          <button class="btn ancho" id="btnGuardarFb">Guardar nube</button>
+          <button class="btn ancho peligro" id="btnSalir">Salir de esta familia en este celular</button>
+          <p class="nota">Quien tenga el código puede entrar a la familia. Compártelo solo con ustedes.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav>
+    <button data-vista="vMapa" aria-current="true"><span>🗺️</span>Mapa</button>
+    <button data-vista="vLugares"><span>📍</span>Lugares</button>
+    <button data-vista="vChat"><span>💬</span>Chat<em class="globo oculto" id="navGlobo">0</em></button>
+    <button data-vista="vYo"><span>👤</span>Yo</button>
+  </nav>
+</div>
+
+<!-- ============ HOJAS ============ -->
+<div class="hoja" id="hojaInvitar"><div class="caja">
+  <h2>Invitar a la familia</h2>
+  <p class="nota">En el otro celular: abrir esta misma dirección, elegir <b>Unirme con un código</b> y escribir:</p>
+  <div class="codigo" id="invCodigo">——————</div>
+  <button class="btn pri ancho" id="btnCompartirLink">Compartir por WhatsApp</button>
+  <button class="btn ancho" id="btnCopiarLink">Copiar enlace de invitación</button>
+  <button class="btn sec ancho" data-cerrar>Cerrar</button>
+</div></div>
+
+<div class="hoja" id="hojaLugar"><div class="caja">
+  <h2 id="lugarTitulo">Nuevo lugar</h2>
+  <label>Nombre <input type="text" id="lugarNombre" placeholder="Casa" maxlength="24"></label>
+  <div>
+    <label style="margin-bottom:6px">Icono</label>
+    <div class="pick" id="lugarEmoji"></div>
+  </div>
+  <label>Radio: <b id="lugarRadioTx">150 m</b>
+    <input type="range" id="lugarRadio" min="50" max="1500" step="25" value="150">
+  </label>
+  <div class="kv"><span>Centro</span><b id="lugarCentro">—</b></div>
+  <div class="fila">
+    <button class="btn" id="btnLugarAqui">📍 Usar donde estoy</button>
+    <button class="btn" id="btnLugarMapa">🗺️ Elegir en el mapa</button>
+  </div>
+  <button class="btn pri ancho" id="btnLugarGuardar">Guardar lugar</button>
+  <button class="btn ancho peligro oculto" id="btnLugarBorrar">Borrar lugar</button>
+  <button class="btn sec ancho" data-cerrar>Cancelar</button>
+</div></div>
+
+<div class="hoja" id="hojaPerfil"><div class="caja">
+  <h2>Mi perfil</h2>
+  <label>Nombre <input type="text" id="pfNombre" maxlength="20"></label>
+  <div>
+    <label style="margin-bottom:6px">Rol</label>
+    <div class="rol" id="pfRol">
+      <button data-rol="adulto">👩‍👦 Adulto<small>ve a todos</small></button>
+      <button data-rol="hijo">🧒 Hijo<small>ve a los adultos</small></button>
+    </div>
+  </div>
+  <div><label style="margin-bottom:6px">Figura</label><div class="pick" id="pfEmoji"></div></div>
+  <div><label style="margin-bottom:6px">Color</label><div class="pick colores" id="pfColor"></div></div>
+  <button class="btn pri ancho" id="btnPerfilGuardar">Guardar</button>
+  <button class="btn sec ancho" data-cerrar>Cancelar</button>
+</div></div>
+
+<div id="alertaSOS">
+  <span style="font-size:22px">🚨</span>
+  <div class="tx" id="sosTexto">SOS</div>
+  <button id="btnSosVer">Ver</button>
+  <button id="btnSosOk">Voy</button>
+</div>
+
+<div id="toast"></div>
+
+<script src="vendor/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
